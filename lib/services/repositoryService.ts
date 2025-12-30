@@ -1,4 +1,4 @@
-import { prisma } from '../prisma'
+import prisma from '@/lib/prisma'
 import { GitService } from './gitService'
 import * as path from 'path'
 import * as os from 'os'
