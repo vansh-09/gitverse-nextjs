@@ -42,13 +42,13 @@ export const Navbar: React.FC = () => {
 
           {/* CTA Buttons */}
           <div className="hidden md:flex items-center gap-3">
-            <Button variant="ghost" asChild>
+            <Button className="bg-gradient-primary hover:opacity-90 transition-opacity" asChild>
               <Link href="/login">Sign In</Link>
             </Button>
             <Button className="bg-gradient-primary hover:opacity-90 transition-opacity" asChild>
               <Link href="/signup">Get Started</Link>
             </Button>
-          </div>
+          </div> 
 
           {/* Mobile Menu Button */}
           <button
@@ -75,7 +75,7 @@ export const Navbar: React.FC = () => {
                 </a>
               ))}
               <div className="flex flex-col gap-3 pt-4 border-t border-border/50">
-                <Button variant="ghost" asChild className="w-full justify-start">
+                <Button className="bg-gradient-primary" asChild>
                   <Link href="/login">Sign In</Link>
                 </Button>
                 <Button className="bg-gradient-primary" asChild>
