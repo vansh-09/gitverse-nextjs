@@ -26,6 +26,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import { useToast } from "@/hooks/use-toast";
+import { buildApiUrl } from "@/services/apiConfig";
 
 type TabType =
   | "overview"
@@ -71,6 +72,7 @@ export default function RepositoryAnalysis() {
   const [repository, setRepository] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [job, setJob] = useState<any>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -79,39 +81,92 @@ export default function RepositoryAnalysis() {
   }, [id]);
 
   useEffect(() => {
-    // Poll repository status if it's analyzing
-    if (
-      repository &&
-      (repository.status === "pending" || repository.status === "analyzing")
-    ) {
-      setIsAnalyzing(true);
-      const pollInterval = setInterval(() => {
-        fetchRepository();
-      }, 3000); // Poll every 3 seconds
+    // Poll job status (lightweight) while analyzing.
+    const repoStatus = repository?.status as string | undefined;
+    const jobStatus = job?.status as string | undefined;
 
-      return () => clearInterval(pollInterval);
-    } else {
-      setIsAnalyzing(false);
-    }
-  }, [repository?.status]);
+    const shouldShowAnalyzing =
+      repoStatus === "pending" ||
+      repoStatus === "analyzing" ||
+      jobStatus === "QUEUED" ||
+      jobStatus === "PROCESSING";
+
+    setIsAnalyzing(Boolean(shouldShowAnalyzing));
+
+    const jobId = job?.id || repository?.latestJob?.id;
+    if (!jobId) return;
+
+    if (jobStatus === "DONE" || jobStatus === "FAILED") return;
+
+    let stopped = false;
+    let intervalMs = 2000;
+
+    const poll = async () => {
+      if (stopped) return;
+      await fetchJob(jobId);
+      if (stopped) return;
+      setTimeout(poll, intervalMs);
+      intervalMs = Math.min(5000, intervalMs + 500);
+    };
+
+    poll();
+
+    return () => {
+      stopped = true;
+    };
+  }, [repository?.status, repository?.latestJob?.id, job?.id, job?.status]);
 
   const fetchRepository = async () => {
     if (!id) return;
 
     try {
       const token = localStorage.getItem("gitverse_token");
-      const response = await axios.get(
-        `${process.env.NEXT_PUBLIC_API_URL || ""}/api/repositories/${id}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-      setRepository(response.data.repository || response.data);
+      const response = await axios.get(buildApiUrl(`/api/repositories/${id}`), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const repo = response.data.repository || response.data;
+      setRepository(repo);
+
+      if (response.data.latestJob) {
+        setJob(response.data.latestJob);
+      }
       console.log("Repository data:", response.data);
     } catch (error) {
       console.error("Error fetching repository:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchJob = async (jobId: string) => {
+    if (!jobId) return;
+
+    try {
+      const token = localStorage.getItem("gitverse_token");
+      const response = await axios.get(
+        buildApiUrl(`/api/analysis-jobs/${jobId}`),
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      const nextJob = response.data.job || response.data;
+      setJob(nextJob);
+
+      if (nextJob?.status === "DONE") {
+        // Job finished — refresh repository once to load results.
+        await fetchRepository();
+      }
+
+      if (nextJob?.status === "FAILED") {
+        toast({
+          title: "Analysis failed",
+          description: nextJob?.error || "The repository analysis failed.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching analysis job:", error);
     }
   };
 
@@ -121,12 +176,9 @@ export default function RepositoryAnalysis() {
 
     try {
       const token = localStorage.getItem("gitverse_token");
-      await axios.delete(
-        `${process.env.NEXT_PUBLIC_API_URL || ""}/api/repositories/${id}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      await axios.delete(buildApiUrl(`/api/repositories/${id}`), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
       toast({
         title: "Repository deleted",
@@ -270,8 +322,9 @@ export default function RepositoryAnalysis() {
                     contributors, and more.
                   </p>
                   <p className="text-sm text-muted-foreground mt-2">
-                    This may take a few moments depending on the repository
-                    size...
+                    {job?.progressPercent != null || job?.progressMessage
+                      ? `${job?.progressPercent ?? 0}% — ${job?.progressMessage || "Working"}`
+                      : "This may take a few moments depending on the repository size..."}
                   </p>
                 </div>
                 <div className="flex justify-center gap-4 text-sm text-muted-foreground">

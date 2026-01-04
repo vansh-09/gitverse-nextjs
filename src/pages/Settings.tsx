@@ -17,6 +17,7 @@ import {
   toast,
 } from "@/components/ui";
 import { useAuth } from "@/contexts/AuthContext";
+import { buildApiUrl } from "@/services/apiConfig";
 import axios from "axios";
 
 export default function Settings() {
@@ -42,7 +43,7 @@ export default function Settings() {
     try {
       const token = localStorage.getItem("gitverse_token");
       const response = await axios.put(
-        `${process.env.NEXT_PUBLIC_API_URL || ""}/api/users/profile`,
+        buildApiUrl("/api/users/profile"),
         {
           name,
           email,
@@ -105,7 +106,7 @@ export default function Settings() {
     try {
       const token = localStorage.getItem("gitverse_token");
       const response = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL || ""}/api/users/change-password`,
+        buildApiUrl("/api/users/change-password"),
         {
           currentPassword,
           newPassword,
@@ -189,12 +190,9 @@ export default function Settings() {
     setIsDeletingAccount(true);
     try {
       const token = localStorage.getItem("gitverse_token");
-      await axios.delete(
-        `${process.env.NEXT_PUBLIC_API_URL || ""}/api/users/me`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      await axios.delete(buildApiUrl("/api/users/me"), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
       await logout();
 

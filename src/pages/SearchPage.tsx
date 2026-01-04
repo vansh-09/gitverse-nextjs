@@ -15,6 +15,7 @@ import {
   Button,
   Input,
 } from "@/components/ui";
+import { buildApiUrl } from "@/services/apiConfig";
 import axios from "axios";
 
 interface Repository {
@@ -50,12 +51,9 @@ export default function SearchPage() {
   const fetchRepositories = async () => {
     try {
       const token = localStorage.getItem("gitverse_token");
-      const response = await axios.get(
-        `${process.env.NEXT_PUBLIC_API_URL || ""}/api/repositories`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      const response = await axios.get(buildApiUrl("/api/repositories"), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       // API returns { repositories: [...] }
       const repos = response.data.repositories || [];
       setRepositories(Array.isArray(repos) ? repos : []);

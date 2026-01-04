@@ -1,14 +1,15 @@
-import { PrismaClient } from '@prisma/client'
-import { Pool } from 'pg'
-import { PrismaPg } from '@prisma/adapter-pg'
+import { PrismaClient } from "@prisma/client";
+import { Pool } from "pg";
+import { PrismaPg } from "@prisma/adapter-pg";
 
-function createPrismaClient() {
-  const connectionString = process.env.DATABASE_URL
+function createPrismaClient(): PrismaClient {
+  const connectionString = process.env.DATABASE_URL;
 
+  // IMPORTANT: Prisma Client is configured to use the "client" engine (driver adapters).
+  // Instantiating PrismaClient without an adapter will throw.
+  // We intentionally defer instantiation until runtime so builds don't require secrets.
   if (!connectionString) {
-    return new PrismaClient({
-      log: ['error', 'warn'],
-    })
+    throw new Error("DATABASE_URL is required");
   }
 
   const pool = new Pool({
@@ -17,28 +18,39 @@ function createPrismaClient() {
     idleTimeoutMillis: 30000,
     max: 20,
     min: 2,
-  })
+  });
 
-  pool.on('error', (err) => {
-    console.error('Unexpected pool error:', err)
-  })
+  pool.on("error", (err) => {
+    console.error("Unexpected pool error:", err);
+  });
 
-  const adapter = new PrismaPg(pool)
+  const adapter = new PrismaPg(pool);
 
   return new PrismaClient({
     adapter,
-    log: ['error', 'warn'],
-  })
+    log: ["error", "warn"],
+  });
 }
 
 // Prevent multiple instances in development
 const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
+  prisma: PrismaClient | undefined;
+};
+
+export function getPrisma(): PrismaClient {
+  if (globalForPrisma.prisma) return globalForPrisma.prisma;
+
+  const created = createPrismaClient();
+  if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = created;
+  return created;
 }
 
-const prisma = globalForPrisma.prisma ?? createPrismaClient()
+const prisma = new Proxy({} as PrismaClient, {
+  get(_target, prop) {
+    const client = getPrisma() as unknown as Record<PropertyKey, unknown>;
+    return client[prop];
+  },
+});
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
-
-export default prisma
-export { prisma }
+export default prisma;
+export { prisma };

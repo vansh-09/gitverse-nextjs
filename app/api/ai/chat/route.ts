@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/middleware";
-import { geminiService } from "@/lib/services/geminiService";
+import { isHttpError, requireAuth } from "@/lib/middleware";
+import { getGeminiService } from "@/lib/services/geminiService";
 import { repositoryService } from "@/lib/services/repositoryService";
 
 export async function POST(request: NextRequest) {
@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
 
     // Free-form mode: client provides a prebuilt prompt.
     if (typeof prompt === "string" && prompt.trim()) {
-      const response = await geminiService.chatRaw(prompt);
+      const response = await getGeminiService().chatRaw(prompt);
       return NextResponse.json({ response });
     }
 
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       ),
     };
 
-    const response = await geminiService.chatAboutRepository({
+    const response = await getGeminiService().chatAboutRepository({
       repositoryId,
       question,
       conversationHistory,
@@ -58,8 +58,11 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("AI chat error:", error);
 
-    if (error?.message === "Unauthorized") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (isHttpError(error)) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status }
+      );
     }
 
     return NextResponse.json(

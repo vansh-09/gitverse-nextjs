@@ -25,6 +25,7 @@ import {
   Input,
 } from "@/components/ui";
 import { useAuth } from "@/contexts/AuthContext";
+import { buildApiUrl } from "@/services/apiConfig";
 import axios from "axios";
 
 interface Repository {
@@ -57,12 +58,9 @@ export default function Dashboard() {
   const fetchRepositories = async () => {
     try {
       const token = localStorage.getItem("gitverse_token");
-      const response = await axios.get(
-        `${process.env.NEXT_PUBLIC_API_URL || ""}/api/repositories`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      const response = await axios.get(buildApiUrl("/api/repositories"), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       // API returns { repositories: [...] }
       const repos = response.data.repositories || [];
       setRepositories(Array.isArray(repos) ? repos : []);
@@ -158,7 +156,7 @@ export default function Dashboard() {
       const repoName = urlParts[urlParts.length - 1];
 
       const response = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL || ""}/api/repositories`,
+        buildApiUrl("/api/repositories"),
         {
           name: repoName,
           url: repoUrl.trim(),

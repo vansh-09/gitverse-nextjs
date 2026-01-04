@@ -9,6 +9,13 @@ datasource db {
   provider = "postgresql"
 }
 
+enum JobStatus {
+  QUEUED
+  PROCESSING
+  DONE
+  FAILED
+}
+
 model User {
   id                    Int          @id @default(autoincrement())
   email                 String       @unique
@@ -21,6 +28,7 @@ model User {
   createdAt             DateTime     @default(now()) @map("created_at")
   updatedAt             DateTime     @updatedAt @map("updated_at")
   repositories          Repository[]
+  analysisJobs          AnalysisJob[]
 
   @@map("users")
 }
@@ -46,8 +54,47 @@ model Repository {
   files          File[]
   contributors   Contributor[]
   languages      Language[]
+  analysisJobs   AnalysisJob[]
 
   @@map("repositories")
+}
+
+model AnalysisJob {
+  id             String    @id @default(uuid()) @db.Uuid
+  status         JobStatus @default(QUEUED)
+  type           String    @default("repository_analysis")
+
+  repositoryId   Int       @map("repository_id")
+  repository     Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  userId         Int       @map("user_id")
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(3) @map("max_attempts")
+  nextRunAt      DateTime  @default(now()) @map("next_run_at")
+
+  progressPercent Int?     @map("progress_percent")
+  progressMessage String?  @map("progress_message")
+  progressDetails Json?    @map("progress_details")
+
+  lockedAt       DateTime? @map("locked_at")
+  lockedBy       String?   @map("locked_by")
+  lockExpiresAt  DateTime? @map("lock_expires_at")
+
+  startedAt      DateTime? @map("started_at")
+  finishedAt     DateTime? @map("finished_at")
+
+  error          String?
+
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, nextRunAt])
+  @@index([lockExpiresAt])
+  @@index([repositoryId])
+  @@index([userId])
+  @@map("analysis_jobs")
 }
 
 model Branch {

@@ -38,7 +38,9 @@ JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
 GEMINI_API_KEY=your_gemini_api_key_here
 
 # Optional: Base URL for API calls
-NEXT_PUBLIC_API_URL=http://localhost:3000
+# Leave unset to use same-origin `/api/...` (recommended).
+# If you set it, avoid a trailing slash (e.g. https://example.com, not https://example.com/)
+# NEXT_PUBLIC_API_URL=http://localhost:3000
 ```
 
 **Important:** Copy `.env.local` to `.env` for Prisma CLI:

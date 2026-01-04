@@ -344,5 +344,11 @@ Provide refactored code examples.`;
   }
 }
 
-// Export singleton instance
-export const geminiService = new GeminiService();
+let geminiServiceSingleton: GeminiService | null = null;
+
+export function getGeminiService(): GeminiService {
+  if (!geminiServiceSingleton) {
+    geminiServiceSingleton = new GeminiService();
+  }
+  return geminiServiceSingleton;
+}

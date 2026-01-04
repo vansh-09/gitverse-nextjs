@@ -1,26 +1,33 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/middleware'
-import { geminiService } from '@/lib/services/geminiService'
+import { NextRequest, NextResponse } from "next/server";
+import { isHttpError, requireAuth } from "@/lib/middleware";
+import { getGeminiService } from "@/lib/services/geminiService";
 
 export async function POST(request: NextRequest) {
   try {
-    requireAuth(request)
-    const body = await request.json()
-    const { added, modified, deleted, diff } = body
+    requireAuth(request);
+    const body = await request.json();
+    const { added, modified, deleted, diff } = body;
 
-    const suggestions = await geminiService.suggestCommitMessage({
+    const suggestions = await getGeminiService().suggestCommitMessage({
       added: added || [],
       modified: modified || [],
       deleted: deleted || [],
       diff,
-    })
+    });
 
-    return NextResponse.json({ suggestions })
+    return NextResponse.json({ suggestions });
   } catch (error: any) {
-    console.error('Commit suggestion error:', error)
+    console.error("Commit suggestion error:", error);
+
+    if (isHttpError(error)) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status }
+      );
+    }
     return NextResponse.json(
-      { error: 'Failed to generate suggestions', details: error.message },
+      { error: "Failed to generate suggestions", details: error.message },
       { status: 500 }
-    )
+    );
   }
 }

@@ -1,9 +1,102 @@
-import { exec } from "child_process";
+import { exec, type ExecOptions } from "child_process";
 import { promisify } from "util";
 import * as path from "path";
 import * as fs from "fs/promises";
 
-const execPromise = promisify(exec);
+const execPromiseRaw = promisify(exec);
+
+const DEFAULT_EXEC_OPTIONS: ExecOptions = {
+  encoding: "utf8",
+  maxBuffer: 20 * 1024 * 1024, // git/log outputs can be large
+};
+
+const DEFAULT_GIT_TIMEOUT_MS = 2 * 60 * 1000;
+const GIT_CLONE_TIMEOUT_MS = 10 * 60 * 1000;
+const GIT_LOG_TIMEOUT_MS = 5 * 60 * 1000;
+const MAX_COMMITS_DEFAULT = 1000;
+const MAX_CONTRIBUTOR_COMMITS = 3000;
+const MAX_FILE_BYTES_TO_READ_FOR_LINECOUNT = 256 * 1024; // 256KB
+
+function execPromise(
+  command: string,
+  options: ExecOptions = {}
+): Promise<{ stdout: string; stderr: string }> {
+  return execPromiseRaw(command, {
+    ...DEFAULT_EXEC_OPTIONS,
+    ...options,
+    timeout: options.timeout ?? DEFAULT_GIT_TIMEOUT_MS,
+    env: {
+      ...process.env,
+      ...options.env,
+      // Prevent git from hanging on credential / interactive prompts.
+      GIT_TERMINAL_PROMPT: "0",
+      GCM_INTERACTIVE: "Never",
+      // Avoid fetching large LFS objects during clone/checkout.
+      GIT_LFS_SKIP_SMUDGE: "1",
+    },
+  }) as unknown as Promise<{ stdout: string; stderr: string }>;
+}
+
+type ParsedCommitHeader = {
+  hash: string;
+  shortHash: string;
+  authorName: string;
+  authorEmail: string;
+  date: string;
+  message: string;
+  description: string;
+  parentsStr: string;
+  refsStr: string;
+};
+
+function parseCommitHeaderLine(line: string): ParsedCommitHeader | null {
+  const parts = line.split("|");
+  if (parts.length < 8) return null;
+  const [
+    hash,
+    shortHash,
+    authorName,
+    authorEmail,
+    date,
+    message,
+    description,
+    parentsStr,
+    refsStr,
+  ] = parts;
+  if (!hash || !authorName || !authorEmail || !date || !message) return null;
+
+  return {
+    hash,
+    shortHash,
+    authorName,
+    authorEmail,
+    date,
+    message,
+    description,
+    parentsStr: parentsStr ?? "",
+    refsStr: refsStr ?? "",
+  };
+}
+
+function normalizeNumstatFilePath(rawPath: string): string {
+  // Numstat uses "a\tb\tpath" and for renames can be "old => new" or "{old => new}".
+  const trimmed = rawPath.trim();
+  if (!trimmed) return trimmed;
+  const arrowIndex = trimmed.lastIndexOf(" => ");
+  if (arrowIndex === -1) return trimmed;
+  const after = trimmed.substring(arrowIndex + 4).trim();
+  // Handle brace rename form: "src/{old => new}/file.ts" => "src/new/file.ts"
+  if (trimmed.includes("{") && trimmed.includes("}")) {
+    const braceOpen = trimmed.indexOf("{");
+    const braceClose = trimmed.indexOf("}");
+    if (braceOpen !== -1 && braceClose !== -1 && braceClose > braceOpen) {
+      const prefix = trimmed.substring(0, braceOpen);
+      const suffix = trimmed.substring(braceClose + 1);
+      return `${prefix}${after}${suffix}`.replace(/\/\/+/, "/");
+    }
+  }
+  return after;
+}
 
 export interface CommitData {
   hash: string;
@@ -73,7 +166,11 @@ export class GitService {
       await fs.mkdir(destination, { recursive: true });
       // Clone with all branches (--no-single-branch fetches all branches)
       await execPromise(
-        `git clone --depth 1000 --no-single-branch "${url}" "${destination}"`
+        `git -c credential.interactive=never -c core.askPass= -c filter.lfs.required=false -c filter.lfs.smudge= -c filter.lfs.process= clone --no-tags --depth 1000 --no-single-branch "${url}" "${destination}"`,
+        {
+          // Cloning can take a while on larger repos.
+          timeout: GIT_CLONE_TIMEOUT_MS,
+        }
       );
       const gitService = new GitService(destination);
       return gitService;
@@ -88,13 +185,15 @@ export class GitService {
   async getBranches(): Promise<BranchData[]> {
     try {
       const { stdout: defaultBranch } = await execPromise(
-        `cd "${this.repoPath}" && git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@'`
+        `cd "${this.repoPath}" && git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@'`,
+        { timeout: DEFAULT_GIT_TIMEOUT_MS }
       );
       const defaultBranchName = defaultBranch.trim();
 
       // Get both local and remote branches
       const { stdout } = await execPromise(
-        `cd "${this.repoPath}" && git for-each-ref --format='%(refname:short)|%(committerdate:iso)|%(objectname)' refs/heads/ refs/remotes/origin/`
+        `cd "${this.repoPath}" && git for-each-ref --format='%(refname:short)|%(committerdate:iso)|%(objectname)' refs/heads/ refs/remotes/origin/`,
+        { timeout: DEFAULT_GIT_TIMEOUT_MS }
       );
 
       const branches: BranchData[] = [];
@@ -115,7 +214,8 @@ export class GitService {
         seenBranches.add(name);
 
         const { stdout: commitCount } = await execPromise(
-          `cd "${this.repoPath}" && git rev-list --count "${fullName}"`
+          `cd "${this.repoPath}" && git rev-list --count "${fullName}"`,
+          { timeout: DEFAULT_GIT_TIMEOUT_MS }
         );
 
         branches.push({
@@ -140,44 +240,31 @@ export class GitService {
    */
   async getCommits(
     branch: string = "HEAD",
-    limit: number = 1000
+    limit: number = MAX_COMMITS_DEFAULT
   ): Promise<CommitData[]> {
     try {
+      const effectiveLimit = Math.max(1, Math.min(limit, MAX_COMMITS_DEFAULT));
       // %P = parent hashes, %D = ref names (tags, branches)
       const format = "%H|%h|%an|%ae|%aI|%s|%b|%P|%D";
-      const { stdout } = await execPromise(
-        `cd "${this.repoPath}" && git log --format="${format}" --shortstat -n ${limit} "${branch}"`
-      );
+      // Use one git log invocation to gather commits + shortstat + numstat; avoids N x `git show`.
+      const cmd = `cd "${this.repoPath}" && git log --format="${format}" --shortstat --numstat -n ${effectiveLimit} "${branch}"`;
+      const { stdout } = await execPromise(cmd, {
+        timeout: GIT_LOG_TIMEOUT_MS,
+      });
 
       const commits: CommitData[] = [];
 
-      // Split by commit hash at the beginning of lines
-      const commitRegex = /^([a-f0-9]{40}\|)/gm;
-      const matches = [...stdout.matchAll(commitRegex)];
+      // Stream-parse the output.
+      let currentHeader: ParsedCommitHeader | null = null;
+      let currentFileChanges: FileChangeData[] = [];
+      let currentAdditions = 0;
+      let currentDeletions = 0;
+      let currentFilesChanged = 0;
 
-      if (matches.length === 0) {
-        console.warn("No commits found in git log output");
-        return [];
-      }
+      const flush = () => {
+        if (!currentHeader) return;
 
-      for (let i = 0; i < matches.length; i++) {
-        const startIndex = matches[i].index!;
-        const endIndex =
-          i < matches.length - 1 ? matches[i + 1].index! : stdout.length;
-        const block = stdout.substring(startIndex, endIndex).trim();
-
-        const lines = block.split("\n").filter(Boolean);
-        if (lines.length === 0) continue;
-
-        const firstLine = lines[0];
-        const parts = firstLine.split("|");
-
-        if (parts.length < 8) {
-          console.warn("Skipping commit with insufficient fields");
-          continue;
-        }
-
-        const [
+        const {
           hash,
           shortHash,
           authorName,
@@ -187,35 +274,23 @@ export class GitService {
           description,
           parentsStr,
           refsStr,
-        ] = parts;
+        } = currentHeader;
 
-        // Skip if essential fields are missing
-        if (!hash || !authorName || !authorEmail || !date || !message) {
-          console.warn("Skipping commit with missing fields");
-          continue;
-        }
-
-        // Parse parent hashes
         const parents = parentsStr
           ? parentsStr.trim().split(" ").filter(Boolean)
           : [];
 
-        // Parse tags + ref decorations from %D (format: "HEAD -> main, origin/main, tag: v1.0")
         const tags: string[] = [];
         const refs: string[] = [];
 
-        // This field is not a reliable “single branch” in Git DAG terms (a commit can belong to many).
-        // Keep it for backwards compatibility, but prefer rendering `refs`.
-        let commitBranch = branch === "--all" ? "main" : branch; // default fallback
+        let commitBranch = branch === "--all" ? "main" : branch;
 
         if (refsStr) {
-          // Extract tags
           const tagMatches = refsStr.matchAll(/tag:\s*([^,)]+)/g);
           for (const match of tagMatches) {
             tags.push(match[1].trim());
           }
 
-          // Store non-tag decorations (branches/remotes/HEAD)
           for (const rawPart of refsStr.split(",")) {
             const part = rawPart.trim();
             if (!part) continue;
@@ -223,13 +298,10 @@ export class GitService {
             refs.push(part);
           }
 
-          // Extract branch name from refs
-          // Priority: HEAD -> branch, origin/branch, or just branch name
           const headMatch = refsStr.match(/HEAD\s*->\s*([^,)]+)/);
           if (headMatch) {
             commitBranch = headMatch[1].trim().replace(/^origin\//, "");
           } else {
-            // Look for origin/branch or branch names
             const branchMatch = refsStr.match(
               /(?:origin\/)?([a-zA-Z0-9_\-\/]+)(?=,|$|\))/
             );
@@ -238,28 +310,6 @@ export class GitService {
             }
           }
         }
-
-        const statsLine = lines.find(
-          (l) => l.includes("changed") || l.includes("file")
-        );
-
-        let additions = 0;
-        let deletions = 0;
-        let filesChanged = 0;
-
-        if (statsLine) {
-          const match = statsLine.match(
-            /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/
-          );
-          if (match) {
-            filesChanged = parseInt(match[1]);
-            additions = match[2] ? parseInt(match[2]) : 0;
-            deletions = match[3] ? parseInt(match[3]) : 0;
-          }
-        }
-
-        // Get file changes for this commit
-        const fileChanges = await this.getFileChanges(hash);
 
         commits.push({
           hash: hash.trim(),
@@ -273,53 +323,81 @@ export class GitService {
           parents,
           refs,
           tags,
-          additions,
-          deletions,
-          filesChanged,
-          fileChanges,
+          additions: currentAdditions,
+          deletions: currentDeletions,
+          filesChanged: currentFilesChanged,
+          fileChanges: currentFileChanges,
         });
+      };
+
+      const lines = stdout.split("\n");
+      for (const rawLine of lines) {
+        const line = rawLine.trimEnd();
+        if (!line) continue;
+
+        // Commit header begins with 40-hex hash then pipe.
+        if (/^[a-f0-9]{40}\|/.test(line)) {
+          flush();
+          currentHeader = parseCommitHeaderLine(line);
+          currentFileChanges = [];
+          currentAdditions = 0;
+          currentDeletions = 0;
+          currentFilesChanged = 0;
+          continue;
+        }
+
+        if (!currentHeader) {
+          continue;
+        }
+
+        // Shortstat line: "N files changed, X insertions(+), Y deletions(-)"
+        if (line.includes("changed") || line.includes("file")) {
+          const match = line.match(
+            /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/
+          );
+          if (match) {
+            currentFilesChanged = parseInt(match[1]);
+            currentAdditions = match[2] ? parseInt(match[2]) : 0;
+            currentDeletions = match[3] ? parseInt(match[3]) : 0;
+          }
+          continue;
+        }
+
+        // Numstat line: "add\tdel\tpath" (add/del can be '-')
+        if (line.includes("\t")) {
+          const parts = line.split("\t");
+          if (parts.length >= 3) {
+            const addStr = parts[0];
+            const delStr = parts[1];
+            const rawPath = parts.slice(2).join("\t");
+            const additions = addStr === "-" ? 0 : parseInt(addStr) || 0;
+            const deletions = delStr === "-" ? 0 : parseInt(delStr) || 0;
+            const filePath = normalizeNumstatFilePath(rawPath);
+
+            let changeType: "added" | "modified" | "deleted" = "modified";
+            if (additions > 0 && deletions === 0) changeType = "added";
+            else if (additions === 0 && deletions > 0) changeType = "deleted";
+
+            if (filePath) {
+              currentFileChanges.push({
+                path: filePath,
+                additions,
+                deletions,
+                changeType,
+              });
+            }
+          }
+        }
       }
 
+      flush();
+
+      if (commits.length === 0) {
+        console.warn("No commits found in git log output");
+      }
       return commits;
     } catch (error: any) {
       throw new Error(`Failed to get commits: ${error.message}`);
-    }
-  }
-
-  /**
-   * Get file changes for a specific commit
-   */
-  private async getFileChanges(commitHash: string): Promise<FileChangeData[]> {
-    try {
-      const { stdout } = await execPromise(
-        `cd "${this.repoPath}" && git show --numstat --format="" "${commitHash}"`
-      );
-
-      const changes: FileChangeData[] = [];
-      const lines = stdout.trim().split("\n").filter(Boolean);
-
-      for (const line of lines) {
-        const [addStr, delStr, filePath] = line.split("\t");
-
-        // Handle binary files or moved files
-        const additions = addStr === "-" ? 0 : parseInt(addStr);
-        const deletions = delStr === "-" ? 0 : parseInt(delStr);
-
-        let changeType: "added" | "modified" | "deleted" = "modified";
-        if (additions > 0 && deletions === 0) changeType = "added";
-        else if (additions === 0 && deletions > 0) changeType = "deleted";
-
-        changes.push({
-          path: filePath,
-          additions,
-          deletions,
-          changeType,
-        });
-      }
-
-      return changes;
-    } catch (error: any) {
-      return []; // Return empty array if commit doesn't exist or has no changes
     }
   }
 
@@ -328,8 +406,10 @@ export class GitService {
    */
   async getContributors(): Promise<ContributorData[]> {
     try {
+      // Contributor scans can be expensive; cap by commit count.
       const { stdout } = await execPromise(
-        `cd "${this.repoPath}" && git log --format="%an|%ae|%aI" --numstat`
+        `cd "${this.repoPath}" && git log --format="%an|%ae|%aI" --numstat -n ${MAX_CONTRIBUTOR_COMMITS}`,
+        { timeout: GIT_LOG_TIMEOUT_MS }
       );
 
       const contributorMap = new Map<string, ContributorData>();
@@ -510,7 +590,8 @@ export class GitService {
   > {
     try {
       const { stdout } = await execPromise(
-        `cd "${this.repoPath}" && git ls-files`
+        `cd "${this.repoPath}" && git ls-files`,
+        { timeout: DEFAULT_GIT_TIMEOUT_MS }
       );
 
       const files: {
@@ -538,8 +619,13 @@ export class GitService {
           // Count lines in the file
           let lineCount = 0;
           try {
-            const content = await fs.readFile(fullPath, "utf-8");
-            lineCount = content.split("\n").length;
+            if (stats.size <= MAX_FILE_BYTES_TO_READ_FOR_LINECOUNT) {
+              const content = await fs.readFile(fullPath, "utf-8");
+              lineCount = content.split("\n").length;
+            } else {
+              // Avoid reading very large files into memory.
+              lineCount = Math.ceil(stats.size / 80);
+            }
           } catch {
             // If can't read as text, estimate from bytes (avg 80 chars per line)
             lineCount = Math.ceil(stats.size / 80);
@@ -613,9 +699,13 @@ export class GitService {
             // Count lines in the file
             try {
               const fullPath = path.join(this.repoPath, file.path);
-              const content = await fs.readFile(fullPath, "utf-8");
-              const lineCount = content.split("\n").length;
-              stats.lines += lineCount;
+              if (file.size <= MAX_FILE_BYTES_TO_READ_FOR_LINECOUNT) {
+                const content = await fs.readFile(fullPath, "utf-8");
+                const lineCount = content.split("\n").length;
+                stats.lines += lineCount;
+              } else {
+                stats.lines += Math.ceil(file.size / 80);
+              }
             } catch {
               // If can't read file, estimate lines from bytes (avg 80 chars per line)
               stats.lines += Math.ceil(file.size / 80);
@@ -649,7 +739,8 @@ export class GitService {
   async getRepositorySize(): Promise<number> {
     try {
       const { stdout } = await execPromise(
-        `cd "${this.repoPath}" && du -sb . | cut -f1`
+        `cd "${this.repoPath}" && du -sb . | cut -f1`,
+        { timeout: DEFAULT_GIT_TIMEOUT_MS }
       );
       return parseInt(stdout.trim());
     } catch (error: any) {

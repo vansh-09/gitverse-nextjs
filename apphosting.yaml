@@ -30,5 +30,3 @@ env:
     secret: database-url
   - variable: JWT_SECRET
     secret: jwt-secret
-  - variable: NEXT_PUBLIC_API_URL
-    value: https://gitverse-nextjs--gen-lang-client-0450794546.asia-southeast1.hosted.app/
