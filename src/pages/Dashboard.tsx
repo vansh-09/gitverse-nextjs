@@ -201,7 +201,7 @@ export default function Dashboard() {
             Welcome back, {user?.name}! 👋
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground">
-            Here's what's happening with your repositories today
+            Here&apos;s what&apos;s happening with your repositories today
           </p>
         </div>
 

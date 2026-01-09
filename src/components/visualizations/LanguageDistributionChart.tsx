@@ -264,6 +264,7 @@ export function LanguageDistributionChart({
           color: "white",
           zIndex: 9999,
           backdropFilter: "blur(8px)",
+          transform: "translate(-400px, -400px)",
           left: "0px",
           top: "0px",
         }}

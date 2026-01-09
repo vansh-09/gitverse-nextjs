@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState } from "react";
 import {
   ChevronRight,
   ChevronDown,
@@ -10,57 +10,67 @@ import {
   BarChart3,
   Code,
   Clock,
-} from 'lucide-react'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui'
+} from "lucide-react";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui";
 
 interface FileNode {
-  name: string
-  type: 'file' | 'folder'
-  path: string
-  size?: number
-  fileData?: any // Reference to the actual file object from repository
-  children?: FileNode[]
+  name: string;
+  type: "file" | "folder";
+  path: string;
+  size?: number;
+  fileData?: any; // Reference to the actual file object from repository
+  children?: FileNode[];
 }
 
 interface FileTreeProps {
-  node: FileNode
-  level?: number
-  onFileSelect?: (fileData: any) => void
+  node: FileNode;
+  level?: number;
+  onFileSelect?: (fileData: any) => void;
 }
 
-const FileTreeNode: React.FC<FileTreeProps> = ({ node, level = 0, onFileSelect }) => {
-  const [isExpanded, setIsExpanded] = useState(level === 0)
+const FileTreeNode: React.FC<FileTreeProps> = ({
+  node,
+  level = 0,
+  onFileSelect,
+}) => {
+  const [isExpanded, setIsExpanded] = useState(level === 0);
 
   const handleToggle = () => {
-    if (node.type === 'folder') {
-      setIsExpanded(!isExpanded)
+    if (node.type === "folder") {
+      setIsExpanded(!isExpanded);
     } else if (node.fileData) {
-      onFileSelect?.(node.fileData)
+      onFileSelect?.(node.fileData);
     }
-  }
+  };
 
   const getFileIcon = (name: string) => {
-    const ext = name.split('.').pop()?.toLowerCase()
-    const iconClass = 'h-4 w-4'
+    const ext = name.split(".").pop()?.toLowerCase();
+    const iconClass = "h-4 w-4";
 
     switch (ext) {
-      case 'ts':
-      case 'tsx':
-        return <File className={`${iconClass} text-blue-500`} />
-      case 'js':
-      case 'jsx':
-        return <File className={`${iconClass} text-yellow-500`} />
-      case 'css':
-      case 'scss':
-        return <File className={`${iconClass} text-purple-500`} />
-      case 'json':
-        return <File className={`${iconClass} text-green-500`} />
-      case 'md':
-        return <File className={`${iconClass} text-gray-500`} />
+      case "ts":
+      case "tsx":
+        return <File className={`${iconClass} text-blue-500`} />;
+      case "js":
+      case "jsx":
+        return <File className={`${iconClass} text-yellow-500`} />;
+      case "css":
+      case "scss":
+        return <File className={`${iconClass} text-purple-500`} />;
+      case "json":
+        return <File className={`${iconClass} text-green-500`} />;
+      case "md":
+        return <File className={`${iconClass} text-gray-500`} />;
       default:
-        return <File className={`${iconClass} text-muted-foreground`} />
+        return <File className={`${iconClass} text-muted-foreground`} />;
     }
-  }
+  };
 
   return (
     <div>
@@ -69,7 +79,7 @@ const FileTreeNode: React.FC<FileTreeProps> = ({ node, level = 0, onFileSelect }
         style={{ paddingLeft: `${level * 1.5 + 0.5}rem` }}
         onClick={handleToggle}
       >
-        {node.type === 'folder' && (
+        {node.type === "folder" && (
           <span className="text-muted-foreground">
             {isExpanded ? (
               <ChevronDown className="h-4 w-4" />
@@ -78,7 +88,7 @@ const FileTreeNode: React.FC<FileTreeProps> = ({ node, level = 0, onFileSelect }
             )}
           </span>
         )}
-        {node.type === 'folder' ? (
+        {node.type === "folder" ? (
           isExpanded ? (
             <FolderOpen className="h-4 w-4 text-primary" />
           ) : (
@@ -88,112 +98,123 @@ const FileTreeNode: React.FC<FileTreeProps> = ({ node, level = 0, onFileSelect }
           getFileIcon(node.name)
         )}
         <span className="text-sm flex-1">{node.name}</span>
-        {node.type === 'file' && node.size && (
-          <span className="text-xs text-muted-foreground">{formatBytes(node.size)}</span>
+        {node.type === "file" && node.size && (
+          <span className="text-xs text-muted-foreground">
+            {formatBytes(node.size)}
+          </span>
         )}
       </div>
-      {node.type === 'folder' && isExpanded && node.children && (
+      {node.type === "folder" && isExpanded && node.children && (
         <div>
           {node.children.map((child, index) => (
-            <FileTreeNode key={index} node={child} level={level + 1} onFileSelect={onFileSelect} />
+            <FileTreeNode
+              key={index}
+              node={child}
+              level={level + 1}
+              onFileSelect={onFileSelect}
+            />
           ))}
         </div>
       )}
     </div>
-  )
-}
+  );
+};
 
 const formatBytes = (bytes: number): string => {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return Math.round((bytes / Math.pow(k, i)) * 10) / 10 + ' ' + sizes[i]
-}
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round((bytes / Math.pow(k, i)) * 10) / 10 + " " + sizes[i];
+};
 
 interface FileStructureProps {
-  repository?: any
+  repository?: any;
 }
 
 export const FileStructure = ({ repository }: FileStructureProps) => {
-  const [selectedFile, setSelectedFile] = useState<any | null>(null)
+  const [selectedFile, setSelectedFile] = useState<any | null>(null);
 
   // Build file tree from repository files
   const buildFileTree = (files: any[]): FileNode => {
     const root: FileNode = {
-      name: repository?.name || 'root',
-      type: 'folder',
-      path: '/',
+      name: repository?.name || "root",
+      type: "folder",
+      path: "/",
       children: [],
-    }
+    };
 
     files?.forEach((file: any) => {
-      const parts = file.path.split('/').filter(Boolean)
-      let current = root
+      const parts = file.path.split("/").filter(Boolean);
+      let current = root;
 
       parts.forEach((part: string, index: number) => {
-        const isLast = index === parts.length - 1
-        const path = '/' + parts.slice(0, index + 1).join('/')
+        const isLast = index === parts.length - 1;
+        const path = "/" + parts.slice(0, index + 1).join("/");
 
-        if (!current.children) current.children = []
+        if (!current.children) current.children = [];
 
-        let existing = current.children.find((c) => c.name === part)
+        let existing = current.children.find((c) => c.name === part);
         if (!existing) {
           existing = {
             name: part,
-            type: isLast ? 'file' : 'folder',
+            type: isLast ? "file" : "folder",
             path,
             size: isLast ? file.size : undefined,
             fileData: isLast ? file : undefined, // Store the actual file object for files
             children: isLast ? undefined : [],
-          }
-          current.children.push(existing)
+          };
+          current.children.push(existing);
         }
 
-        if (!isLast) current = existing
-      })
-    })
+        if (!isLast) current = existing;
+      });
+    });
 
-    return root
-  }
+    return root;
+  };
 
-  const fileTree = buildFileTree(repository?.files || [])
+  const fileTree = buildFileTree(repository?.files || []);
 
   const handleFileSelect = (fileData: any) => {
-    setSelectedFile(fileData)
-  }
+    setSelectedFile(fileData);
+  };
 
   // Count commits for a specific file
   const getFileCommitCount = (filePath: string): number => {
     return (
       repository?.commits?.reduce((count: number, commit: any) => {
-        const fileChanged = commit.fileChanges?.some((fc: any) => fc.path === filePath)
-        return fileChanged ? count + 1 : count
+        const fileChanged = commit.fileChanges?.some(
+          (fc: any) => fc.path === filePath
+        );
+        return fileChanged ? count + 1 : count;
       }, 0) || 0
-    )
-  }
+    );
+  };
 
   // Get file changes stats
   const getFileChangeStats = (filePath: string) => {
-    let additions = 0
-    let deletions = 0
+    let additions = 0;
+    let deletions = 0;
     repository?.commits?.forEach((commit: any) => {
       commit.fileChanges?.forEach((change: any) => {
         if (change.path === filePath) {
-          additions += change.additions || 0
-          deletions += change.deletions || 0
+          additions += change.additions || 0;
+          deletions += change.deletions || 0;
         }
-      })
-    })
-    return { additions, deletions }
-  }
+      });
+    });
+    return { additions, deletions };
+  };
 
   return (
     <div className="space-y-4">
       <Card className="glass">
         <CardHeader>
           <CardTitle className="font-heading">File Structure</CardTitle>
-          <CardDescription>Explore the repository's file system</CardDescription>
+          <CardDescription>
+            Explore the repository&apos;s file system
+          </CardDescription>
           <CardDescription>*Click on a file for more info*</CardDescription>
         </CardHeader>
         <CardContent>
@@ -228,7 +249,9 @@ export const FileStructure = ({ repository }: FileStructureProps) => {
                   <Code className="h-6 w-6 text-primary" />
                 </div>
                 <div className="flex-1">
-                  <h2 className="text-2xl font-bold break-all">{selectedFile.name}</h2>
+                  <h2 className="text-2xl font-bold break-all">
+                    {selectedFile.name}
+                  </h2>
                   <p className="text-sm text-muted-foreground mt-2 font-mono break-all">
                     {selectedFile.path}
                   </p>
@@ -255,28 +278,37 @@ export const FileStructure = ({ repository }: FileStructureProps) => {
               <div className="bg-white/5 rounded-lg p-4 border border-white/10">
                 <div className="flex items-center gap-2 mb-2 text-blue-400">
                   <Code className="h-4 w-4" />
-                  <span className="text-xs font-semibold uppercase">Lines of Code</span>
+                  <span className="text-xs font-semibold uppercase">
+                    Lines of Code
+                  </span>
                 </div>
-                <p className="text-3xl font-bold">{selectedFile.lines?.toLocaleString() || 0}</p>
-                
+                <p className="text-3xl font-bold">
+                  {selectedFile.lines?.toLocaleString() || 0}
+                </p>
               </div>
 
               <div className="bg-white/5 rounded-lg p-4 border border-white/10">
                 <div className="flex items-center gap-2 mb-2 text-green-400">
                   <GitCommit className="h-4 w-4" />
-                  <span className="text-xs font-semibold uppercase">Commits</span>
+                  <span className="text-xs font-semibold uppercase">
+                    Commits
+                  </span>
                 </div>
-                <p className="text-3xl font-bold">{getFileCommitCount(selectedFile.path)}</p>
-                
+                <p className="text-3xl font-bold">
+                  {getFileCommitCount(selectedFile.path)}
+                </p>
               </div>
 
               <div className="bg-white/5 rounded-lg p-4 border border-white/10">
                 <div className="flex items-center gap-2 mb-2 text-yellow-400">
                   <BarChart3 className="h-4 w-4" />
-                  <span className="text-xs font-semibold uppercase">File Size</span>
+                  <span className="text-xs font-semibold uppercase">
+                    File Size
+                  </span>
                 </div>
-                <p className="text-3xl font-bold">{formatBytes(selectedFile.size || 0)}</p>
-                
+                <p className="text-3xl font-bold">
+                  {formatBytes(selectedFile.size || 0)}
+                </p>
               </div>
             </div>
 
@@ -296,7 +328,10 @@ export const FileStructure = ({ repository }: FileStructureProps) => {
                         Lines Added
                       </p>
                       <p className="text-2xl font-bold text-green-400">
-                        +{getFileChangeStats(selectedFile.path).additions.toLocaleString()}
+                        +
+                        {getFileChangeStats(
+                          selectedFile.path
+                        ).additions.toLocaleString()}
                       </p>
                     </div>
                     <p className="text-xs text-muted-foreground">
@@ -310,7 +345,10 @@ export const FileStructure = ({ repository }: FileStructureProps) => {
                         Lines Deleted
                       </p>
                       <p className="text-2xl font-bold text-red-400">
-                        -{getFileChangeStats(selectedFile.path).deletions.toLocaleString()}
+                        -
+                        {getFileChangeStats(
+                          selectedFile.path
+                        ).deletions.toLocaleString()}
                       </p>
                     </div>
                     <p className="text-xs text-muted-foreground">
@@ -324,20 +362,22 @@ export const FileStructure = ({ repository }: FileStructureProps) => {
                         Net Change
                       </p>
                       <p
-                        className={`text-2xl font-bold ${getFileChangeStats(selectedFile.path).additions - getFileChangeStats(selectedFile.path).deletions >= 0 ? 'text-green-400' : 'text-red-400'}`}
+                        className={`text-2xl font-bold ${getFileChangeStats(selectedFile.path).additions - getFileChangeStats(selectedFile.path).deletions >= 0 ? "text-green-400" : "text-red-400"}`}
                       >
                         {getFileChangeStats(selectedFile.path).additions -
                           getFileChangeStats(selectedFile.path).deletions >=
                         0
-                          ? '+'
-                          : ''}
+                          ? "+"
+                          : ""}
                         {(
                           getFileChangeStats(selectedFile.path).additions -
                           getFileChangeStats(selectedFile.path).deletions
                         ).toLocaleString()}
                       </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">Net additions minus deletions</p>
+                    <p className="text-xs text-muted-foreground">
+                      Net additions minus deletions
+                    </p>
                   </div>
                 </div>
               </div>
@@ -379,7 +419,8 @@ export const FileStructure = ({ repository }: FileStructureProps) => {
                         ? (
                             (getFileChangeStats(selectedFile.path).deletions /
                               (getFileChangeStats(selectedFile.path).additions +
-                                getFileChangeStats(selectedFile.path).deletions)) *
+                                getFileChangeStats(selectedFile.path)
+                                  .deletions)) *
                             100
                           ).toFixed(1)
                         : 0}
@@ -396,14 +437,19 @@ export const FileStructure = ({ repository }: FileStructureProps) => {
                     </p>
                     <p className="text-sm font-semibold">
                       {selectedFile.createdAt
-                        ? new Date(selectedFile.createdAt).toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                          })
-                        : 'Unknown'}
+                        ? new Date(selectedFile.createdAt).toLocaleDateString(
+                            "en-US",
+                            {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                            }
+                          )
+                        : "Unknown"}
                     </p>
-                    <p className="text-xs text-muted-foreground">First added to repository</p>
+                    <p className="text-xs text-muted-foreground">
+                      First added to repository
+                    </p>
                   </div>
                 </div>
               </div>
@@ -421,8 +467,10 @@ export const FileStructure = ({ repository }: FileStructureProps) => {
                     Total Modifications
                   </p>
                   <p className="text-lg font-semibold">
-                    {getFileCommitCount(selectedFile.path)}{' '}
-                    {getFileCommitCount(selectedFile.path) === 1 ? 'commit' : 'commits'}
+                    {getFileCommitCount(selectedFile.path)}{" "}
+                    {getFileCommitCount(selectedFile.path) === 1
+                      ? "commit"
+                      : "commits"}
                   </p>
                 </div>
                 <div>
@@ -433,7 +481,7 @@ export const FileStructure = ({ repository }: FileStructureProps) => {
                     {(
                       getFileChangeStats(selectedFile.path).additions +
                       getFileChangeStats(selectedFile.path).deletions
-                    ).toLocaleString()}{' '}
+                    ).toLocaleString()}{" "}
                     changes
                   </p>
                 </div>
@@ -451,5 +499,5 @@ export const FileStructure = ({ repository }: FileStructureProps) => {
         </div>
       )}
     </div>
-  )
-}
+  );
+};

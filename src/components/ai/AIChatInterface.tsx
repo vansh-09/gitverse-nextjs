@@ -3,6 +3,7 @@ import { Send, Loader2, Sparkles, User, Bot, Copy, Check } from "lucide-react";
 import { Card } from "@/components/ui";
 import { geminiService, ChatMessage } from "@/services/gemini";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface AIChatInterfaceProps {
   repositoryContext?: {
@@ -25,6 +26,7 @@ export function AIChatInterface({ repositoryContext }: AIChatInterfaceProps) {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -55,7 +57,7 @@ export function AIChatInterface({ repositoryContext }: AIChatInterfaceProps) {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    if (!geminiService.isConfigured()) {
+    if (isAuthLoading || !isAuthenticated) {
       toast({
         title: "Login required",
         description: "Please log in to use the AI assistant.",

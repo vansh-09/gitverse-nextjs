@@ -14,7 +14,7 @@ interface CommitActivityHeatmapProps {
 }
 
 // Generate commit activity data from repository commits
-const generateCommitData = (commits: any[]): CommitData[] => {
+const generateCommitData = (commits: any[], now: Date): CommitData[] => {
   const data: CommitData[] = [];
   const commitsByDate = new Map<string, number>();
 
@@ -26,7 +26,6 @@ const generateCommitData = (commits: any[]): CommitData[] => {
   });
 
   // Fill in the last 52 weeks
-  const now = new Date();
   for (let week = 0; week < 52; week++) {
     for (let day = 0; day < 7; day++) {
       const date = new Date(now);
@@ -50,15 +49,34 @@ export function CommitActivityHeatmap({
 }: CommitActivityHeatmapProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const [now, setNow] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<{
     date: string;
     count: number;
   } | null>(null);
 
   useEffect(() => {
+    // Advance the window automatically as time passes (refresh at next local midnight).
+    const scheduleNextTick = () => {
+      const nextMidnight = new Date();
+      nextMidnight.setHours(24, 0, 1, 0);
+      const msUntilNextMidnight = nextMidnight.getTime() - Date.now();
+      return window.setTimeout(() => {
+        setNow(new Date());
+        scheduleNextTick();
+      }, msUntilNextMidnight);
+    };
+
+    const timeoutId = scheduleNextTick();
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!svgRef.current) return;
 
-    const data = generateCommitData(repository?.commits || []);
+    const data = generateCommitData(repository?.commits || [], now);
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
 
@@ -82,7 +100,7 @@ export function CommitActivityHeatmap({
     const weeksData = d3.group(data, (d) => {
       const date = new Date(d.date);
       const weekNum = Math.floor(
-        (new Date().getTime() - date.getTime()) / (7 * 24 * 60 * 60 * 1000)
+        (now.getTime() - date.getTime()) / (7 * 24 * 60 * 60 * 1000)
       );
       return weekNum;
     });
@@ -116,7 +134,7 @@ export function CommitActivityHeatmap({
       .attr("font-size", "10px")
       .text((d) => d);
 
-    // Month labels - ensure all 12 months are labeled
+    // Month labels - derived from the rolling 52-week window
     const months = [
       "Jan",
       "Feb",
@@ -132,20 +150,10 @@ export function CommitActivityHeatmap({
       "Dec",
     ];
 
-    // Create a map of all dates in the data
-    const dateToWeekIndex = new Map<string, number>();
-    weeks.forEach((weekNum, weekIndex) => {
-      const weekData = weeksData.get(weekNum) || [];
-      weekData.forEach((d) => {
-        dateToWeekIndex.set(d.date, weekIndex);
-      });
-    });
-
-    // Draw month labels for all months in the last 52 weeks
-    // Collect all month positions
+    // Collect month label positions (keep unique month+year, so labels slide forward over time)
     const monthPositions: Array<{ month: string; x: number; fullDate: Date }> =
       [];
-    const seenMonths = new Set<string>();
+    const seenMonthKeys = new Set<string>();
 
     weeks.forEach((weekNum, weekIndex) => {
       const weekData = weeksData.get(weekNum) || [];
@@ -154,6 +162,11 @@ export function CommitActivityHeatmap({
         const monthIndex = firstDate.getMonth();
         const monthName = months[monthIndex];
         const xPosition = (51 - weekIndex) * (cellSize + cellPadding);
+
+        const monthKey = `${firstDate.getFullYear()}-${monthIndex}`;
+
+        if (seenMonthKeys.has(monthKey)) return;
+        seenMonthKeys.add(monthKey);
 
         monthPositions.push({
           month: monthName,
@@ -166,17 +179,8 @@ export function CommitActivityHeatmap({
     // Sort by x-position (left to right)
     monthPositions.sort((a, b) => a.x - b.x);
 
-    // Keep only the first occurrence of each month name (leftmost position)
-    const filteredMonths = monthPositions.filter((item) => {
-      if (seenMonths.has(item.month)) {
-        return false;
-      }
-      seenMonths.add(item.month);
-      return true;
-    });
-
     // Draw month labels
-    filteredMonths.forEach(({ month, x }) => {
+    monthPositions.forEach(({ month, x }) => {
       g.append("text")
         .attr("class", "month-label")
         .attr("x", x)
@@ -338,7 +342,7 @@ export function CommitActivityHeatmap({
       .attr("fill", "currentColor")
       .attr("font-size", "10px")
       .text("More");
-  }, [repository]);
+  }, [repository, now]);
 
   // Get commits for selected date
   const getCommitsForDate = (date: string) => {
@@ -458,7 +462,7 @@ export function CommitActivityHeatmap({
           color: "white",
           zIndex: 9999,
           backdropFilter: "blur(8px)",
-          transform: "translate(-300px, -300px)",
+          transform: "translate(-400px, -400px)",
           left: "0px",
           top: "0px",
           whiteSpace: "nowrap",

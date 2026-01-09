@@ -318,7 +318,7 @@ export default function RepositoryAnalysis() {
                     Analyzing Repository
                   </h2>
                   <p className="text-muted-foreground">
-                    We're analyzing the repository structure, commits,
+                    We&apos;re analyzing the repository structure, commits,
                     contributors, and more.
                   </p>
                   <p className="text-sm text-muted-foreground mt-2">

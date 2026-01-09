@@ -3,6 +3,7 @@ import { Send, Loader2, X, Minimize2, Maximize2, Sparkles } from "lucide-react";
 import { Card } from "@/components/ui";
 import { geminiService, ChatMessage } from "@/services/gemini";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface AIRepositoryOverlayProps {
   repository: {
@@ -34,6 +35,7 @@ export function AIRepositoryOverlay({ repository }: AIRepositoryOverlayProps) {
   const [contextSent, setContextSent] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -58,7 +60,7 @@ export function AIRepositoryOverlay({ repository }: AIRepositoryOverlayProps) {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    if (!geminiService.isConfigured()) {
+    if (isAuthLoading || !isAuthenticated) {
       toast({
         title: "Login required",
         description: "Please log in to use the repository assistant.",

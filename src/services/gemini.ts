@@ -35,12 +35,9 @@ class GeminiService {
   }
 
   isConfigured(): boolean {
-    // AI endpoints require authentication; the API key is server-side.
-    const token =
-      typeof window !== "undefined"
-        ? localStorage.getItem("gitverse_token")
-        : null;
-    return !!token;
+    // The Gemini API key is server-side; authentication is handled by the caller
+    // (via AuthContext) and enforced by the API route.
+    return true;
   }
 
   async chat(message: string, context?: RepositoryContext): Promise<string> {
@@ -62,6 +59,7 @@ User Question: ${message}
 
       const res = await fetch("/api/ai/chat", {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
           ...this.getAuthHeaders(),
@@ -112,6 +110,7 @@ User Question: ${message}
     try {
       const res = await fetch("/api/ai/analyze-code", {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
           ...this.getAuthHeaders(),

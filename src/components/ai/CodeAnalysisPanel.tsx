@@ -10,6 +10,7 @@ import {
 import { Card } from "@/components/ui";
 import { geminiService, CodeAnalysisRequest } from "@/services/gemini";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 type AnalysisType = "explain" | "bugs" | "improve" | "document";
 
@@ -26,6 +27,7 @@ export function CodeAnalysisPanel() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [results, setResults] = useState<AnalysisResult[]>([]);
   const { toast } = useToast();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
 
   const analysisOptions = [
     {
@@ -72,7 +74,7 @@ export function CodeAnalysisPanel() {
       return;
     }
 
-    if (!geminiService.isConfigured()) {
+    if (isAuthLoading || !isAuthenticated) {
       toast({
         title: "Login required",
         description: "Please log in to use AI features.",
