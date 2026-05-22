@@ -59,7 +59,7 @@ export function CommitActivityHeatmap({
   } | null>(null);
 
   // =========================================================
-  // CRITICAL FIX: EARLY EXTENDED GUARD FOR PERFORMANCE & SAFETY
+  // CRITICAL FIX: LATE EXTENDED GUARD FOR PERFORMANCE & SAFETY
   // =========================================================
   const hasNoCommits = !repository?.commits || repository.commits.length === 0;
 
@@ -82,7 +82,7 @@ export function CommitActivityHeatmap({
   }, []);
 
   useEffect(() => {
-    if (!svgRef.current) return;
+    if (!svgRef.current || !repository?.commits || repository.commits.length === 0) return;
 
     if (!repository?.commits || repository.commits.length === 0) {
       return;
