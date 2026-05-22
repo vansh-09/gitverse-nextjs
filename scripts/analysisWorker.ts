@@ -124,6 +124,12 @@ async function runJob(
       maxAttempts: job.maxAttempts,
       retryAfter: retryAfter ?? undefined,
     });
+
+    const shouldRetry = job.attempts < job.maxAttempts;
+    if (!shouldRetry && job.type === "repository_analysis") {
+      await repositoryService.markRepositoryFailed(job.repositoryId, safeMessage);
+    }
+
     return false;
   } finally {
     if (heartbeatTimer) clearInterval(heartbeatTimer);

@@ -532,6 +532,24 @@ export class RepositoryService {
   }
 
   /**
+   * Safely marks a repository as failed, preventing uncaught exceptions
+   * if the database update fails.
+   */
+  async markRepositoryFailed(id: number, reason?: string) {
+    try {
+      await prisma.repository.update({
+        where: { id },
+        data: { status: "failed" },
+      });
+      if (reason) {
+        console.log(`Repository ${id} marked as failed. Reason: ${reason}`);
+      }
+    } catch (error) {
+      console.error(`Safeguard: Failed to update repository ${id} status to 'failed'`, error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  /**
    * Get repository with all related data
    */
   async getRepository(id: number, userId: number) {
