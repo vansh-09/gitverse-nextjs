@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { isHttpError, requireAuth } from "@/lib/middleware";
 import { repositoryService } from "@/lib/services/repositoryService";
 import { analysisJobService } from "@/lib/services/analysisJobService";
+import { getRepositories } from "@/lib/services/repositoryService";
+import type { PaginatedResponse } from "@/types/pagination";
 
 export async function POST(request: NextRequest) {
   try {
@@ -68,9 +70,23 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth(request);
-    const repositories = await repositoryService.listRepositories(user.userId);
+    const { searchParams } = request.nextUrl;
 
-    return NextResponse.json({ repositories });
+    const rawLimit = parseInt(searchParams.get("limit") ?? "10", 10);
+    const limit = Math.min(isNaN(rawLimit) || rawLimit < 1 ? 10 : rawLimit, 50);
+    const cursor = searchParams.get("cursor") ?? undefined;
+
+    const rows = await getRepositories({
+      userId: user.userId,
+      limit: limit + 1,
+      cursor,
+    });
+
+    const hasMore = rows.length > limit;
+    const data = hasMore ? rows.slice(0, limit) : rows;
+    const nextCursor = hasMore ? String(data[data.length - 1].id) : null;
+
+    return NextResponse.json({ data, nextCursor, hasMore });
   } catch (error: any) {
     console.error("List repositories error:", error);
     if (isHttpError(error)) {

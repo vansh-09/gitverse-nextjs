@@ -632,3 +632,31 @@ export class RepositoryService {
 }
 
 export const repositoryService = new RepositoryService();
+interface GetRepositoriesOptions {
+  userId: number;
+  limit: number;
+  cursor?: string;
+}
+
+export async function getRepositories({ userId, limit, cursor }: GetRepositoriesOptions) {
+  return prisma.repository.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    ...(cursor ? { cursor: { id: parseInt(cursor) }, skip: 1 } : {}),
+    include: {
+      _count: {
+        select: {
+          commits: true,
+          contributors: true,
+          files: true,
+          branches: true,
+        },
+      },
+      languages: {
+        orderBy: { percentage: "desc" },
+        take: 3,
+      },
+    },
+  });
+}
