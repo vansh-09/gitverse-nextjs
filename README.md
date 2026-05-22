@@ -226,6 +226,24 @@ const loadMore = async () => {
 
 ### Vercel (Recommended)
 
+####  Environment Variables Checklist
+
+Before deploying, add these in **Vercel Dashboard → Project → Settings → 
+Environment Variables:**
+
+| Variable | Required | Description | Example |
+|---|---|---|---|
+| `DATABASE_URL` |  Yes | PostgreSQL connection string (Neon recommended) | `postgresql://user:pass@host/db` |
+| `JWT_SECRET` | Yes | Secret key for JWT signing | `openssl rand -base64 32` |
+| `GEMINI_API_KEY` |  Yes | Google Gemini API key | Get from [Google AI Studio](https://aistudio.google.com) |
+| `NEXTAUTH_URL` |  Yes | Your deployed Vercel URL | `https://your-app.vercel.app` |
+| `NEXTAUTH_SECRET` |  Yes | NextAuth session signing secret | `openssl rand -base64 32` |
+| `GOOGLE_CLIENT_ID` |  Yes | Google OAuth client ID | From Google Cloud Console |
+| `GOOGLE_CLIENT_SECRET` |  Yes | Google OAuth client secret | From Google Cloud Console |
+| `NEXT_PUBLIC_API_URL` |  Optional | API URL for client-side calls | Defaults to current domain |
+
+#### 🚀 Deployment Steps
+
 1. Push your code to GitHub.
 2. Import the project in the [Vercel dashboard](https://vercel.com/new).
 3. Under **Settings → Environment Variables**, add every variable listed in the [Environment Variables](#-environment-variables) section below. Vercel automatically makes them available at build time and runtime.
@@ -234,6 +252,12 @@ const loadMore = async () => {
 4. Click **Deploy**.
 
 > **Tip:** Vercel re-deploys automatically on every push to `main`. If you update an environment variable in the dashboard, trigger a redeploy from **Deployments → Redeploy** for the new value to take effect.
+1. Push your code to GitHub
+2. Go to [vercel.com](https://vercel.com) then **Import Project**
+3. Select your GitHub repository
+4. Add all required environment variables from the checklist above
+5. Click **Deploy**
+6. In Google Cloud Console, add your Vercel URL as an OAuth redirect URI
 
 ### Docker
 
