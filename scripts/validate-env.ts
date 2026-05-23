@@ -96,57 +96,23 @@ function validateOptionalValue(
     message: result.message,
   };
 }
-import dotenv from "dotenv";
-import fs from "node:fs";
-import path from "node:path";
 
-type ValidationResult = {
-  key: string;
-  required: boolean;
-  isValid: boolean;
-  message: string;
-};
+function formatResult(result: ValidationResult): string {
+  const statusIcon = result.isValid ? "✅" : "❌";
+  const colorCode = result.isValid ? 32 : 31; // Green for success, Red for failure
+  return colorize(`${statusIcon} ${result.key}: ${result.message}`, colorCode);
+}
 
-const envFileCandidates = [".env.local", ".env"];
+function runValidation() {
+  const loadedPath = loadEnvironmentFile();
 
-function loadEnvironmentFile() {
-  for (const candidate of envFileCandidates) {
-    const filePath = path.resolve(process.cwd(), candidate);
-
-    if (fs.existsSync(filePath)) {
-      dotenv.config({ path: filePath, override: false });
-      return filePath;
-    }
+  if (!loadedPath) {
+    console.warn(colorize("⚠️ No environment file found, relying on process.env", 33));
+  } else {
+    console.log(colorize(`Loaded environment from: ${loadedPath}\n`, 36));
   }
 
-  return null;
-}
-
-function isPlaceholder(value: string) {
-  const normalized = value.trim().toLowerCase();
-
-  return (
-    normalized === "your-secret-here" ||
-    normalized === "replace-me" ||
-    normalized === "change-me" ||
-    normalized === "example" ||
-    normalized.includes("your-") ||
-    normalized.includes("placeholder")
-  );
-}
-
-function isAbsoluteUrl(value: string) {
-  try {
-  console.error(
-      colorize(`\nEnvironment validation failed with ${failures.length} issue(s).`, 31),
-    );
-    process.exit(1);
-  }
-
-  console.log(colorize("\nEnvironment validation passed.", 32));
-}
-
-runValidation();
+  const results: (ValidationResult | null)[] = [
     validateRequiredValue("JWT_SECRET", process.env.JWT_SECRET, (value) => {
       const isValid = Buffer.byteLength(value, "utf8") >= 32 && !isPlaceholder(value);
 
@@ -176,11 +142,11 @@ runValidation();
       };
     }),
     validateRequiredValue("NEXTAUTH_URL", process.env.NEXTAUTH_URL, (value) => {
-      const isValid = isAbsoluteUrl(value);
+      const isValid = isAbsoluteUrl(value) && !isPlaceholder(value);
 
       return {
         isValid,
-        message: isValid ? "Valid absolute URL" : "Must be a valid absolute http(s) URL",
+        message: isValid ? "Valid absolute URL" : "Must be a valid absolute http(s) URL and not a placeholder",
       };
     }),
     validateOptionalValue("GITHUB_APP_ID", process.env.GITHUB_APP_ID, (value) => {
@@ -215,77 +181,11 @@ runValidation();
   if (failures.length > 0) {
     console.error(
       colorize(`\nEnvironment validation failed with ${failures.length} issue(s).`, 31),
->>>>>>> 470289f (chore: remove issue_*.md copies per PR review; keep validator focused)
     );
     process.exit(1);
   }
 
-<<<<<<< HEAD
-  console.log(`Loaded environment from: ${COLORS.green}${COLORS.bold}${loadedPath}${COLORS.reset}\n`);
-
-  let errors = 0;
-  let warnings = 0;
-
-  for (const rule of envRules) {
-    const value = process.env[rule.key];
-
-    if (!value) {
-      if (rule.required) {
-        console.error(
-          `${COLORS.red}❌ Missing Required:${COLORS.reset} ${COLORS.bold}${rule.key}${COLORS.reset}`
-        );
-        errors++;
-      } else if (rule.warning) {
-        console.warn(
-          `${COLORS.yellow}⚠️  Missing Optional (Recommended):${COLORS.reset} ${COLORS.bold}${rule.key}${COLORS.reset}`
-        );
-        warnings++;
-      }
-      continue;
-    }
-
-    if (rule.validate) {
-      const { isValid, message } = rule.validate(value);
-      if (!isValid) {
-        console.error(
-          `${COLORS.red}❌ Invalid Format:${COLORS.reset} ${COLORS.bold}${rule.key}${COLORS.reset}`
-        );
-        console.error(`   👉 ${COLORS.yellow}${message}${COLORS.reset}`);
-        errors++;
-        continue;
-      }
-    }
-
-    // Mask value for secure display
-    const masked = value.length > 8 
-      ? value.substring(0, 4) + "... [MASKED] ..." + value.substring(value.length - 4)
-      : "*** [MASKED] ***";
-
-    console.log(
-      `${COLORS.green}✅ Validated:${COLORS.reset} ${COLORS.bold}${rule.key}${COLORS.reset} (${COLORS.cyan}${masked}${COLORS.reset})`
-    );
-  }
-
-  console.log(`\n${COLORS.bold}${COLORS.cyan}-----------------------------------------${COLORS.reset}`);
-  if (errors > 0) {
-    console.error(
-      `🚨 ${COLORS.red}${COLORS.bold}Validation Failed!${COLORS.reset} Found ${COLORS.bold}${errors}${COLORS.reset} error(s) and ${COLORS.bold}${warnings}${COLORS.reset} warning(s).`
-    );
-    console.error(
-      `Please correct the configurations in your ${COLORS.cyan}${loadedPath}${COLORS.reset} file.\n`
-    );
-    process.exit(1);
-  } else if (warnings > 0) {
-    console.log(
-      `✨ ${COLORS.yellow}${COLORS.bold}Validation Completed with Warnings!${COLORS.reset} All required configurations are valid. Found ${COLORS.bold}${warnings}${COLORS.reset} optional warning(s).`
-    );
-    console.log("Ready for development! Run `npm run dev` to start.\n");
-  } else {
-    console.log(
-      `🎉 ${COLORS.green}${COLORS.bold}All Configurations are 100% Valid!${COLORS.reset} Excellent setup.`
-    );
-    console.log("Ready for development! Run `npm run dev` to start.\n");
-  }
+  console.log(colorize("\nEnvironment validation passed.", 32));
 }
 
 try {
@@ -294,9 +194,3 @@ try {
   console.error("An unexpected error occurred during validation:", error);
   process.exit(1);
 }
-=======
-  console.log(colorize("\nEnvironment validation passed.", 32));
-}
-
-runValidation();
->>>>>>> 470289f (chore: remove issue_*.md copies per PR review; keep validator focused)
