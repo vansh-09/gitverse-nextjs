@@ -599,6 +599,7 @@ export default function LandingPage() {
             onBlur={() => setIsCarouselPaused(false)}
             onTouchStart={() => setIsCarouselPaused(true)}
             onTouchEnd={() => setIsCarouselPaused(false)}
+            onTouchCancel={() => setIsCarouselPaused(false)}
           >
             <div className="feature-carousel__viewport">
               <div className="feature-carousel__track">
