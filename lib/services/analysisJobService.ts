@@ -22,6 +22,7 @@ export class AnalysisJobService {
     repositoryId: number;
     userId: number;
     maxAttempts?: number;
+    scope?: string;
   }): Promise<AnalysisJob> {
     const existing = await prisma.analysisJob.findFirst({
       where: {
@@ -40,6 +41,7 @@ export class AnalysisJobService {
           status: "QUEUED",
           progressPercent: 0,
           progressMessage: "Queued",
+          progressDetails: params.scope ? { scope: params.scope } : undefined,
           maxAttempts: params.maxAttempts ?? 3,
         },
       });
@@ -54,7 +56,21 @@ export class AnalysisJobService {
             status: { in: ["QUEUED", "PROCESSING"] },
           },
         });
-        if (activeJob) return activeJob;
+        if (existingJob) return existingJob;
+
+        // The active job may have completed between the P2002 and the lookup. Retry exactly once.
+        return await prisma.analysisJob.create({
+          data: {
+            repositoryId: params.repositoryId,
+            userId: params.userId,
+            type: "repository_analysis",
+            status: "QUEUED",
+            progressPercent: 0,
+            progressMessage: "Queued",
+            progressDetails: params.scope ? { scope: params.scope } : undefined,
+            maxAttempts: params.maxAttempts ?? 3,
+          },
+        });
       }
       throw error;
     }
